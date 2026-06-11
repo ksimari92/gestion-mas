@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1770156730470,
+      "tag": "0000_simple_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1770166064524,
+      "tag": "0001_soft_sandman",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771548151918,
+      "tag": "0002_bored_jimmy_woo",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --color-primary: 27 67 50;
+        /* #1B4332 */
+        --color-secondary: 217 119 6;
+        /* #D97706 */
+        --color-danger: 153 27 27;
+        /* #991B1B */
+
+        --background: 0 0% 100%;
+        --foreground: 222.2 84% 4.9%;
+
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+
+        --primary: 153 67 50;
+        /* Agro-600 */
+        --primary-foreground: 210 40% 98%;
+
+        --secondary: 45 93% 47%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+
+        --accent: 210 40% 96.1%;
+        --accent-foreground: 222.2 47.4% 11.2%;
+
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 153 67 50;
+
+        --radius: 0.5rem;
+    }
+
+    * {
+        @apply border-border;
+    }
+
+    html {
+        @apply scroll-smooth;
+    }
+
+    body {
+        @apply bg-[#fcfcfc] text-slate-900 antialiased;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        touch-action: manipulation;
+    }
+
+    #root {
+        @apply min-h-screen;
+    }
+}
+
+@layer utilities {
+    .touch-target {
+        @apply min-h-[44px] min-w-[44px];
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .agro-gradient {
+        @apply bg-gradient-to-br from-agro-600 to-agro-800;
+    }
+
+    .agro-glow {
+        @apply shadow-[0_0_20px_rgba(27, 67, 50, 0.15)];
+    }
+
+    .agro-glow-lg {
+        @apply shadow-[0_0_35px_rgba(27, 67, 50, 0.25)];
+    }
+
+    .tracking-mega {
+        letter-spacing: 0.25em;
+    }
+}
+
+@keyframes slide-up {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.animate-slide-up {
+    animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}

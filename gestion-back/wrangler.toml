@@ -1,0 +1,10 @@
+name = "gestion-back"
+compatibility_date = "2024-01-01"
+main = "index.ts"
+
+[[d1_databases]]
+binding = "gestion_db"
+database_name = "gestion-db"
+database_id = "2c13033b-a3e8-498f-aac8-26a6115d51f9"
+
+# JWT_SECRET and SEED_SECRET are managed via Cloudflare Secrets

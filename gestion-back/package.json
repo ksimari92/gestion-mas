@@ -1,0 +1,24 @@
+{
+  "name": "gestion-back",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "generate": "drizzle-kit generate:sqlite",
+    "migrate": "drizzle-kit migrate",
+    "migrate:prod": "wrangler d1 execute gestion-db --remote --file=schema_prod.sql --yes"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.29.5",
+    "hono": "^4.11.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260203.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^25.3.0",
+    "drizzle-kit": "^0.20.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^4.67.0"
+  }
+}

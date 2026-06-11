@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Production
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+**/*.log
+
+# Environment variables
+.env
+.env.production
+.env.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars
+.capnp/
+
+# OS Files
+Thumbs.db
+preview_image_*.png
+
+# Production Seed
+.env.seed
+*.seed
+
+# Antigravity artifacts
+.gemini/
+brain/
+
+# Scratch / debug artifacts
+output.txt
+output.json
+*seed_error*
+*tsc_output*.txt
+test_api.js
+reset_db.js
+verify_data.js
