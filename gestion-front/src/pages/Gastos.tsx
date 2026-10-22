@@ -74,7 +74,7 @@ export const Gastos = () => {
 
     const { data: expenses = [], isLoading } = useQuery({
         queryKey: ['expenses'],
-        queryFn: api.expenses.getAll,
+        queryFn: () => api.expenses.getAll(),
     });
 
     const createMutation = useMutation({

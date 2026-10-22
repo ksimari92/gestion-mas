@@ -1,31 +1,21 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, TrendingDown, DollarSign, Clock, ReceiptText, Edit, Trash2, MoreVertical, Loader2, Check } from 'lucide-react';
 import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import {
+    AlertCircle, ArrowLeft, Check, Clock, Copy, Loader2, MoreVertical,
+    Pencil, ReceiptText, Sprout, Trash2, X,
+} from 'lucide-react';
 import { api } from '../services/api';
 import { ClientStatement } from '../types';
-import { cn } from '../utils/cn';
+import { ClientForm } from '../components/organisms/ClientForm';
 import { Modal } from '../components/atoms/Modal';
 import { Button } from '../components/atoms/Button';
 import { Input } from '../components/atoms/Input';
 import { FormField } from '../components/molecules/FormField';
-import { useForm } from 'react-hook-form';
-
-const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 0
-    }).format(value);
-
-const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('es-AR', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-    });
-};
+import { VIZ } from '../constants/viz';
+import { formatCurrency, formatDateLong } from '../utils/format';
+import { cn } from '../utils/cn';
 
 export const ClientDetail = () => {
     const { id } = useParams();
@@ -38,8 +28,9 @@ export const ClientDetail = () => {
     const [isDeleteClientOpen, setIsDeleteClientOpen] = useState(false);
     const [selectedSale, setSelectedSale] = useState<any>(null);
     const [dropdownOpen, setDropdownOpen] = useState<number | null>(null);
+    const [copied, setCopied] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const { register: regClient, handleSubmit: handleClient, reset: resetClient } = useForm();
     const { register: regSale, handleSubmit: handleSale, reset: resetSale } = useForm();
 
     const { data: statement, isLoading, isError } = useQuery<ClientStatement>({
@@ -48,343 +39,344 @@ export const ClientDetail = () => {
         enabled: !!id,
     });
 
-    const updateClientMutation = useMutation({
-        mutationFn: (data: any) => api.clients.update(Number(id), data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['clients'] });
-            queryClient.invalidateQueries({ queryKey: ['client-statement', id] });
-            queryClient.invalidateQueries({ queryKey: ['client-account-state'] });
-            setIsEditClientOpen(false);
-        }
-    });
+    const invalidate = () => {
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+        queryClient.invalidateQueries({ queryKey: ['client-statement', id] });
+        queryClient.invalidateQueries({ queryKey: ['sales'] });
+        queryClient.invalidateQueries({ queryKey: ['metrics'] });
+    };
 
     const deleteClientMutation = useMutation({
         mutationFn: () => api.clients.delete(Number(id)),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['clients'] });
-            queryClient.invalidateQueries({ queryKey: ['client-account-state'] });
-            navigate('/clients');
-        }
+        onSuccess: () => { invalidate(); navigate('/clients'); },
+        onError: (err: unknown) => {
+            setIsDeleteClientOpen(false);
+            setError(
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+                'No se pudo eliminar el cliente.'
+            );
+        },
     });
 
     const updateSaleMutation = useMutation({
         mutationFn: (data: any) => api.sales.update(selectedSale.id, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['client-statement', id] });
-            queryClient.invalidateQueries({ queryKey: ['client-account-state'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
-            queryClient.invalidateQueries({ queryKey: ['metrics'] });
-            setIsEditSaleOpen(false);
-            setDropdownOpen(null);
-        }
+        onSuccess: () => { invalidate(); setIsEditSaleOpen(false); setDropdownOpen(null); },
     });
 
     const deleteSaleMutation = useMutation({
         mutationFn: (saleId: number) => api.sales.delete(saleId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['client-statement', id] });
-            queryClient.invalidateQueries({ queryKey: ['client-account-state'] });
-            queryClient.invalidateQueries({ queryKey: ['sales'] });
-            queryClient.invalidateQueries({ queryKey: ['metrics'] });
-            setIsDeleteSaleOpen(false);
-            setDropdownOpen(null);
-        }
+        onSuccess: () => { invalidate(); setIsDeleteSaleOpen(false); setDropdownOpen(null); },
     });
 
-    const onEditClient = () => {
-        if (statement) {
-            resetClient({ name: statement.client.name, cuit: statement.client.cuit || '' });
-            setIsEditClientOpen(true);
+    const copy = async (label: string, value: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setCopied(label);
+            setTimeout(() => setCopied(null), 1500);
+        } catch {
+            // Sin portapapeles disponible: el dato igual está visible en pantalla.
         }
-    };
-
-    const onEditSale = (sale: any) => {
-        setSelectedSale(sale);
-        resetSale({
-            bag_quantity: sale.bag_quantity,
-            price_per_bag: sale.price_per_bag,
-            sale_date: sale.sale_date.split('T')[0],
-            client_id: Number(id)
-        });
-        setIsEditSaleOpen(true);
-    };
-
-    const onDeleteSale = (sale: any) => {
-        setSelectedSale(sale);
-        setIsDeleteSaleOpen(true);
     };
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-gray-50/50 p-4 space-y-6 animate-pulse">
-                <div className="h-20 bg-white rounded-2xl border border-gray-100 shadow-sm" />
-                <div className="grid grid-cols-3 gap-3">
-                    <div className="h-24 bg-white rounded-2xl border border-gray-100 shadow-sm" />
-                    <div className="h-24 bg-white rounded-2xl border border-gray-100 shadow-sm" />
-                    <div className="h-24 bg-white rounded-2xl border border-gray-100 shadow-sm" />
-                </div>
-                <div className="space-y-4">
-                    {[1, 2].map(i => <div key={i} className="h-44 bg-white rounded-[2rem] border border-gray-100 shadow-sm" />)}
-                </div>
+            <div className="h-64 grid place-items-center text-slate-400">
+                <Loader2 size={24} className="animate-spin" />
             </div>
         );
     }
 
     if (isError || !statement) {
         return (
-            <div className="min-h-screen bg-gray-50/50 flex flex-col items-center justify-center p-6 text-center">
-                <div className="bg-white p-10 rounded-[2rem] shadow-sm border border-gray-100 max-w-sm">
-                    <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <TrendingDown className="text-rose-500 w-10 h-10" />
-                    </div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tighter mb-2">Algo salió mal</h2>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-8">No pudimos cargar la cuenta</p>
-                    <button
-                        onClick={() => navigate('/clients')}
-                        className="w-full bg-agro-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-agro-900/20 active:scale-95 transition-all"
-                    >
-                        Volver a Clientes
-                    </button>
-                </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center">
+                <AlertCircle size={30} className="mx-auto text-slate-300" />
+                <p className="mt-3 text-base font-bold text-slate-800">No pudimos cargar la cuenta</p>
+                <Link
+                    to="/clients"
+                    className="mt-5 inline-flex h-10 px-4 rounded-xl bg-agro-600 text-white text-sm font-bold items-center gap-2"
+                >
+                    <ArrowLeft size={16} /> Volver a clientes
+                </Link>
             </div>
         );
     }
 
     const { client, summary, sales } = statement;
 
+    const dtvFields = [
+        { label: 'RENSPA', value: client.renspa, copyable: true },
+        { label: 'Titular ante SENASA', value: client.senasa_holder },
+        { label: 'Establecimiento', value: client.establishment },
+        { label: 'Localidad', value: client.locality },
+        { label: 'Provincia', value: client.province },
+    ].filter((field) => Boolean(field.value));
+
+    const hasDtv = dtvFields.length > 0 || Boolean(client.dtv_notes);
+
     return (
-        <div className="min-h-screen bg-gray-50/50 flex flex-col pb-20">
-            <header className="sticky top-0 bg-white/80 backdrop-blur-md px-4 py-6 flex items-center gap-4 z-40 border-b border-gray-100/50">
-                <button
-                    onClick={() => navigate('/clients')}
-                    className="p-2.5 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-colors active:scale-90"
-                >
-                    <ChevronLeft className="h-6 w-6 text-agro-600" strokeWidth={3} />
-                </button>
-                <div>
-                    <h1 className="text-xl font-black text-agro-950 tracking-tight leading-none mb-1">Estado de Cuenta</h1>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{client.name}</p>
-                </div>
-            </header>
-
-            <main className="p-4 space-y-8 mt-2">
-                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-50 relative overflow-hidden group">
-                    <div className="flex items-center gap-5 mb-8">
-                        <div className="bg-agro-50 w-16 h-16 rounded-full flex items-center justify-center text-agro-600 font-black text-3xl border-2 border-white shadow-sm shrink-0">
-                            {(client.name || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <h2 className="text-xl font-black text-slate-900 tracking-tighter truncate leading-tight">
-                                {client.name}
-                            </h2>
-                            {client.cuit ? (
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-0.5">CUIT: {client.cuit}</p>
-                            ) : (
-                                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] mt-0.5 italic lowercase">sin cuit registrado</p>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <button
-                            onClick={onEditClient}
-                            className="flex-1 flex items-center justify-center gap-1.5 bg-gray-50 text-gray-400 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-gray-100 hover:text-gray-600 transition-all active:scale-95 border border-gray-100/50"
-                        >
-                            <Edit size={12} /> Editar
-                        </button>
-                        <button
-                            onClick={() => setIsDeleteClientOpen(true)}
-                            className="flex-1 flex items-center justify-center gap-1.5 bg-rose-50/50 text-rose-400 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-95 border border-rose-100/30"
-                        >
-                            <Trash2 size={12} /> Eliminar
-                        </button>
+        <div className="space-y-5">
+            {/* Encabezado */}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                    <button
+                        onClick={() => navigate('/clients')}
+                        className="shrink-0 w-10 h-10 rounded-xl border border-slate-200 bg-white grid place-items-center text-slate-500 hover:border-agro-600 hover:text-agro-600 transition-colors"
+                        title="Volver a clientes"
+                    >
+                        <ArrowLeft size={17} />
+                    </button>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-black tracking-tight text-slate-900 truncate">{client.name}</h1>
+                        <p className="text-sm text-slate-500 mt-0.5">
+                            {client.cuit ? `CUIT ${client.cuit}` : 'Sin CUIT cargado'}
+                            {client.renspa && <span className="text-slate-300"> · </span>}
+                            {client.renspa && `RENSPA ${client.renspa}`}
+                        </p>
                     </div>
                 </div>
 
-                <section className="space-y-4">
-                    <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">Resumen General</h3>
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-center">
-                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Total</p>
-                            <p className="text-xs font-black text-slate-700 tracking-tight leading-none">{formatCurrency(summary.total_billed)}</p>
-                        </div>
-                        <div className="bg-green-50 p-4 rounded-2xl border border-green-100 shadow-sm text-center">
-                            <p className="text-[9px] font-black text-green-700 uppercase tracking-widest mb-1.5">Pagado</p>
-                            <p className="text-xs font-black text-green-700 tracking-tight leading-none">{formatCurrency(summary.total_paid)}</p>
-                        </div>
-                        <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100 shadow-sm text-center">
-                            <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Pendiente</p>
-                            <p className="text-xs font-black text-rose-600 tracking-tight leading-none">{formatCurrency(summary.pending_balance)}</p>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsEditClientOpen(true)}
+                        className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:border-agro-600 hover:text-agro-600 transition-colors inline-flex items-center gap-2"
+                    >
+                        <Pencil size={15} /> Editar
+                    </button>
+                    <button
+                        onClick={() => { setError(null); setIsDeleteClientOpen(true); }}
+                        className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-500 hover:border-danger-800 hover:text-danger-800 transition-colors inline-flex items-center gap-2"
+                    >
+                        <Trash2 size={15} /> Eliminar
+                    </button>
+                </div>
+            </div>
+
+            {error && (
+                <div className="flex items-center gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3">
+                    <AlertCircle size={18} className="shrink-0 text-danger-800" />
+                    <p className="text-sm font-medium text-danger-800 flex-1">{error}</p>
+                    <button onClick={() => setError(null)} className="text-danger-800/60 hover:text-danger-800">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
+            {/* Cuenta corriente */}
+            <section className="grid gap-4 sm:grid-cols-3">
+                <Tile label="Facturado" value={formatCurrency(summary.total_billed)} />
+                <Tile label="Cobrado" value={formatCurrency(summary.total_paid)} accent />
+                <Tile
+                    label="Saldo pendiente"
+                    value={formatCurrency(summary.pending_balance)}
+                    negative={summary.pending_balance > 0}
+                />
+            </section>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+                {/* Ventas */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 order-2 lg:order-1">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-sm font-black text-slate-900">Ventas</h2>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                {sales.length} {sales.length === 1 ? 'operación registrada' : 'operaciones registradas'}
+                            </p>
                         </div>
                     </div>
-                </section>
 
-                <section className="space-y-4">
-                    <div className="flex items-center justify-between px-1">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Últimas Ventas</h3>
-                        <span className="text-[10px] font-black text-agro-600 uppercase">{sales.length} registros</span>
-                    </div>
-
-                    <div className="space-y-4">
-                        {sales.length === 0 ? (
-                            <div className="bg-white p-12 rounded-[2rem] border border-gray-100 shadow-sm text-center">
-                                <Clock className="mx-auto text-gray-200 mb-2 w-8 h-8" />
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">No hay operaciones<br />registradas aún</p>
-                            </div>
-                        ) : (
-                            sales.map((sale) => {
+                    {sales.length === 0 ? (
+                        <div className="py-12 text-center">
+                            <Clock size={26} className="mx-auto text-slate-300" />
+                            <p className="mt-2 text-sm text-slate-400">Todavía no hay ventas para este cliente</p>
+                        </div>
+                    ) : (
+                        <ul className="space-y-3">
+                            {sales.map((sale) => {
                                 const progress = Math.min((sale.amount_paid_so_far / sale.total_amount) * 100, 100);
-                                const isPaid = sale.is_fully_paid || progress >= 99.9;
+                                const isPaid = Boolean(sale.is_fully_paid) || progress >= 99.9;
 
                                 return (
-                                    <div key={sale.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-50 flex flex-col gap-5 relative group active:scale-[0.99] transition-all">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <div className={cn(
-                                                    "w-10 h-10 rounded-2xl flex items-center justify-center border",
-                                                    isPaid ? "bg-green-50 text-green-600 border-green-100" : "bg-blue-50 text-blue-600 border-blue-100"
-                                                )}>
-                                                    {isPaid ? <Check size={20} strokeWidth={3} /> : <ReceiptText size={20} />}
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-black text-slate-900 text-sm uppercase tracking-tight leading-none mb-1">Venta #{sale.id}</h4>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">{formatDate(sale.sale_date)}</p>
+                                    <li key={sale.id} className="rounded-2xl border border-slate-200 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <span
+                                                    className="shrink-0 w-8 h-8 rounded-lg grid place-items-center"
+                                                    style={{
+                                                        backgroundColor: isPaid ? VIZ.track : VIZ.warningTrack,
+                                                        color: isPaid ? VIZ.data : VIZ.warning,
+                                                    }}
+                                                >
+                                                    {isPaid ? <Check size={15} strokeWidth={3} /> : <ReceiptText size={15} />}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-slate-800">
+                                                        Venta #{sale.id}
+                                                        <span className="ml-2 font-medium text-slate-400">
+                                                            {formatDateLong(sale.sale_date)}
+                                                        </span>
+                                                    </p>
+                                                    <p className="text-xs text-slate-400 tabular-nums">
+                                                        {sale.bag_quantity} × {formatCurrency(sale.price_per_bag)}
+                                                    </p>
                                                 </div>
                                             </div>
 
-                                            <div className="relative">
-                                                <button
-                                                    onClick={() => setDropdownOpen(dropdownOpen === sale.id ? null : sale.id)}
-                                                    className="p-2 hover:bg-gray-50 rounded-full transition-colors active:scale-90"
-                                                >
-                                                    <MoreVertical className="h-5 w-5 text-gray-300" />
-                                                </button>
+                                            <div className="flex items-start gap-2 shrink-0">
+                                                <span className="text-sm font-black tabular-nums text-slate-900">
+                                                    {formatCurrency(sale.total_amount)}
+                                                </span>
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => setDropdownOpen(dropdownOpen === sale.id ? null : sale.id)}
+                                                        className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100"
+                                                    >
+                                                        <MoreVertical size={16} />
+                                                    </button>
+                                                    {dropdownOpen === sale.id && (
+                                                        <div className="absolute right-0 top-8 z-30 w-40 rounded-xl border border-slate-200 bg-white shadow-xl py-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedSale(sale);
+                                                                    resetSale({
+                                                                        bag_quantity: sale.bag_quantity,
+                                                                        price_per_bag: sale.price_per_bag,
+                                                                        sale_date: sale.sale_date,
+                                                                    });
+                                                                    setIsEditSaleOpen(true);
+                                                                }}
+                                                                className="w-full px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                                            >
+                                                                <Pencil size={14} /> Editar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setSelectedSale(sale); setIsDeleteSaleOpen(true); }}
+                                                                className="w-full px-3 py-2 text-left text-sm font-semibold text-danger-800 hover:bg-danger-50 flex items-center gap-2"
+                                                            >
+                                                                <Trash2 size={14} /> Eliminar
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                                {dropdownOpen === sale.id && (
-                                                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-40 animate-in fade-in slide-in-from-top-2">
-                                                        <button
-                                                            onClick={() => onEditSale(sale)}
-                                                            className="w-full px-5 py-3 text-left text-[10px] font-black uppercase text-gray-600 hover:bg-agro-50 flex items-center gap-3"
-                                                        >
-                                                            <Edit size={14} /> Editar
-                                                        </button>
-                                                        <button
-                                                            onClick={() => onDeleteSale(sale)}
-                                                            className="w-full px-5 py-3 text-left text-[10px] font-black uppercase text-red-600 hover:bg-red-50 flex items-center gap-3"
-                                                        >
-                                                            <Trash2 size={14} /> Eliminar
-                                                        </button>
-                                                    </div>
+                                        {/* Estado de cobro: la barra acompaña, los números mandan */}
+                                        <div className="mt-3">
+                                            <div className="h-1.5 w-full rounded-sm" style={{ backgroundColor: isPaid ? VIZ.track : VIZ.warningTrack }}>
+                                                <div
+                                                    className="h-full"
+                                                    style={{
+                                                        width: `${Math.max(progress, progress > 0 ? 2 : 0)}%`,
+                                                        backgroundColor: isPaid ? VIZ.data : VIZ.warning,
+                                                        borderRadius: '0 4px 4px 0',
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="mt-1.5 flex items-center justify-between text-xs">
+                                                <span className="font-semibold" style={{ color: isPaid ? VIZ.data : VIZ.warning }}>
+                                                    {isPaid ? 'Saldada' : `Cobrado ${formatCurrency(sale.amount_paid_so_far)}`}
+                                                </span>
+                                                {!isPaid && (
+                                                    <span className="font-bold text-slate-700 tabular-nums">
+                                                        Debe {formatCurrency(sale.pending)}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="bg-gray-50/50 p-5 rounded-2xl flex items-center justify-between border border-gray-50">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Monto Neto</p>
-                                                <p className="text-2xl font-black text-agro-700 tracking-tighter leading-none">
-                                                    {formatCurrency(sale.total_amount)}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Detalle</p>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase">
-                                                    {sale.bag_quantity} Bolsas <span className="text-gray-300">|</span> {formatCurrency(sale.price_per_bag)}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-3 px-1">
-                                            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                                                <span className="text-gray-400">Estado de Cobro</span>
-                                                <span className={cn(isPaid ? "text-green-600" : "text-amber-600")}>
-                                                    {Math.round(progress)}%
-                                                </span>
-                                            </div>
-                                            <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden p-0.5 border border-gray-200/50">
-                                                <div
-                                                    className={cn(
-                                                        "h-full rounded-full transition-all duration-1000 ease-out",
-                                                        isPaid ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-amber-400"
-                                                    )}
-                                                    style={{ width: `${progress}%` }}
-                                                />
-                                            </div>
-                                            <div className="flex justify-between items-center pt-1">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-gray-300 uppercase leading-none mb-1">Cobrado</span>
-                                                    <p className="text-xs font-black text-slate-700 tracking-tighter">{formatCurrency(sale.amount_paid_so_far)}</p>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] font-black text-gray-300 uppercase leading-none mb-1">Deuda</span>
-                                                    <p className="text-xs font-black text-rose-600 tracking-tighter">{formatCurrency(sale.pending)}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="h-px bg-gray-50 -mx-6" />
-
-                                        <div className="space-y-4">
-                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Historial de Cobros</h5>
-                                            {sale.payments.length === 0 ? (
-                                                <div className="py-2 px-1">
-                                                    <p className="text-[10px] font-bold text-gray-300 uppercase italic">Sin pagos vinculados</p>
-                                                </div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    {sale.payments.map((payment) => (
-                                                        <div key={payment.id} className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-colors hover:bg-gray-50/50">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-10 h-10 rounded-2xl bg-green-50 flex items-center justify-center text-green-600">
-                                                                    <DollarSign size={18} strokeWidth={3} />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-sm font-black text-slate-900 leading-tight tracking-tight">
-                                                                        {formatCurrency(payment.amount_paid)}
-                                                                    </p>
-                                                                    <p className="text-[10px] font-black text-green-600 uppercase tracking-tighter px-1.5 py-0.5 bg-green-50 rounded inline-block mt-1">
-                                                                        {payment.payment_method}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">{formatDate(payment.created_at)}</p>
-                                                                <p className="text-[9px] font-bold text-gray-300 uppercase">Por {payment.received_by.split(' ')[0]}</p>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                        {sale.payments.length > 0 && (
+                                            <ul className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+                                                {sale.payments.map((payment) => (
+                                                    <li key={payment.id} className="flex items-center justify-between text-xs">
+                                                        <span className="text-slate-500">
+                                                            {payment.payment_method.toLowerCase()} · {payment.received_by.split(' ')[0]}
+                                                        </span>
+                                                        <span className="font-bold tabular-nums" style={{ color: VIZ.data }}>
+                                                            +{formatCurrency(payment.amount_paid)}
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </li>
                                 );
-                            })
-                        )}
-                    </div>
+                            })}
+                        </ul>
+                    )}
                 </section>
-            </main>
 
-            <Modal isOpen={isEditClientOpen} onClose={() => setIsEditClientOpen(false)} title="Editar Perfil">
-                <form onSubmit={handleClient((d) => updateClientMutation.mutate(d))} className="space-y-6">
-                    <FormField label="Nombre" required>
-                        <Input {...regClient('name', { required: true })} />
-                    </FormField>
-                    <FormField label="CUIT">
-                        <Input {...regClient('cuit')} />
-                    </FormField>
-                    <Button type="submit" className="w-full bg-agro-600 text-white" disabled={updateClientMutation.isPending}>
-                        {updateClientMutation.isPending ? <Loader2 className="animate-spin" /> : 'Guardar Cambios'}
-                    </Button>
-                </form>
-            </Modal>
+                {/* Ficha de DTV */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 order-1 lg:order-2">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Sprout size={16} className="text-agro-600" />
+                        <h2 className="text-sm font-black text-slate-900">Datos para el DTV</h2>
+                    </div>
 
-            <Modal isOpen={isEditSaleOpen} onClose={() => setIsEditSaleOpen(false)} title="Editar Venta">
+                    {!hasDtv ? (
+                        <div className="text-sm text-slate-400">
+                            <p>Este cliente no tiene cargados datos de Documento de Tránsito Vegetal.</p>
+                            <button
+                                onClick={() => setIsEditClientOpen(true)}
+                                className="mt-3 text-sm font-bold text-agro-600 hover:underline"
+                            >
+                                Cargarlos ahora
+                            </button>
+                        </div>
+                    ) : (
+                        <dl className="space-y-3">
+                            {dtvFields.map((field) => (
+                                <div key={field.label}>
+                                    <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                        {field.label}
+                                    </dt>
+                                    <dd className="mt-0.5 flex items-center gap-2">
+                                        <span className={cn('text-sm font-semibold text-slate-800', field.copyable && 'tabular-nums')}>
+                                            {field.value}
+                                        </span>
+                                        {field.copyable && (
+                                            <button
+                                                onClick={() => copy(field.label, String(field.value))}
+                                                title="Copiar"
+                                                className="p-1 rounded-md text-slate-300 hover:text-agro-600 hover:bg-agro-50 transition-colors"
+                                            >
+                                                {copied === field.label ? <Check size={13} /> : <Copy size={13} />}
+                                            </button>
+                                        )}
+                                    </dd>
+                                </div>
+                            ))}
+                            {client.dtv_notes && (
+                                <div className="pt-1">
+                                    <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                        Observaciones
+                                    </dt>
+                                    <dd className="mt-0.5 text-sm text-slate-600">{client.dtv_notes}</dd>
+                                </div>
+                            )}
+                        </dl>
+                    )}
+                </section>
+            </div>
+
+            {/* Modales */}
+            {isEditClientOpen && (
+                <ClientForm
+                    client={client}
+                    onClose={() => setIsEditClientOpen(false)}
+                    onSubmit={async (data) => {
+                        await api.clients.update(Number(id), data);
+                        invalidate();
+                    }}
+                />
+            )}
+
+            <Modal isOpen={isEditSaleOpen} onClose={() => setIsEditSaleOpen(false)} title="Editar venta">
                 <form onSubmit={handleSale((d) => updateSaleMutation.mutate(d))} className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
-                        <FormField label="Bolsas" required>
+                        <FormField label="Cantidad" required>
                             <Input type="number" {...regSale('bag_quantity', { required: true, valueAsNumber: true })} />
                         </FormField>
-                        <FormField label="Precio" required>
+                        <FormField label="Precio unitario" required>
                             <Input type="number" step="0.01" {...regSale('price_per_bag', { required: true, valueAsNumber: true })} />
                         </FormField>
                     </div>
@@ -392,36 +384,44 @@ export const ClientDetail = () => {
                         <Input type="date" {...regSale('sale_date', { required: true })} />
                     </FormField>
                     <Button type="submit" className="w-full bg-agro-600 text-white" disabled={updateSaleMutation.isPending}>
-                        {updateSaleMutation.isPending ? <Loader2 className="animate-spin" /> : 'Actualizar Venta'}
+                        {updateSaleMutation.isPending ? <Loader2 className="animate-spin" /> : 'Guardar cambios'}
                     </Button>
                 </form>
             </Modal>
 
-            <Modal isOpen={isDeleteSaleOpen} onClose={() => setIsDeleteSaleOpen(false)} title="Eliminar Venta">
+            <Modal isOpen={isDeleteSaleOpen} onClose={() => setIsDeleteSaleOpen(false)} title="Eliminar venta">
                 <div className="space-y-6">
-                    <p className="text-sm text-slate-600 font-medium">
-                        ¿Estás seguro de que quieres eliminar la venta <span className="font-black text-slate-900">#{selectedSale?.id}</span>?
-                        <br /><br />
-                        <span className="text-red-600 font-bold uppercase text-[10px] tracking-widest border border-red-100 bg-red-50 px-2 py-1 rounded">Atención:</span> Esta acción también eliminará todos los cobros asociados a esta venta.
+                    <p className="text-sm text-slate-600">
+                        ¿Eliminar la venta <span className="font-bold text-slate-900">#{selectedSale?.id}</span>?
+                        Se borran también los cobros asociados y no se puede deshacer.
                     </p>
                     <div className="flex gap-3">
                         <Button variant="secondary" onClick={() => setIsDeleteSaleOpen(false)} className="flex-1">Cancelar</Button>
-                        <Button onClick={() => deleteSaleMutation.mutate(selectedSale.id)} className="flex-1 bg-red-600 text-white" disabled={deleteSaleMutation.isPending}>
-                            {deleteSaleMutation.isPending ? <Loader2 className="animate-spin" /> : 'Eliminar Venta'}
+                        <Button
+                            onClick={() => deleteSaleMutation.mutate(selectedSale.id)}
+                            className="flex-1 bg-danger-800 text-white"
+                            disabled={deleteSaleMutation.isPending}
+                        >
+                            {deleteSaleMutation.isPending ? <Loader2 className="animate-spin" /> : 'Eliminar'}
                         </Button>
                     </div>
                 </div>
             </Modal>
 
-            <Modal isOpen={isDeleteClientOpen} onClose={() => setIsDeleteClientOpen(false)} title="Eliminar Cliente">
+            <Modal isOpen={isDeleteClientOpen} onClose={() => setIsDeleteClientOpen(false)} title="Eliminar cliente">
                 <div className="space-y-6">
-                    <p className="text-sm text-slate-600 font-medium">
-                        ¿Estás seguro de que quieres eliminar a <span className="font-black text-slate-900">{client.name}</span>?
-                        Esta acción es permanente.
+                    <p className="text-sm text-slate-600">
+                        ¿Eliminar a <span className="font-bold text-slate-900">{client.name}</span>?
+                        Se pierden también sus datos de DTV. Si tiene ventas registradas,
+                        primero hay que eliminarlas.
                     </p>
                     <div className="flex gap-3">
                         <Button variant="secondary" onClick={() => setIsDeleteClientOpen(false)} className="flex-1">Cancelar</Button>
-                        <Button onClick={() => deleteClientMutation.mutate()} className="flex-1 bg-red-600 text-white" disabled={deleteClientMutation.isPending}>
+                        <Button
+                            onClick={() => deleteClientMutation.mutate()}
+                            className="flex-1 bg-danger-800 text-white"
+                            disabled={deleteClientMutation.isPending}
+                        >
                             {deleteClientMutation.isPending ? <Loader2 className="animate-spin" /> : 'Eliminar'}
                         </Button>
                     </div>
@@ -430,3 +430,20 @@ export const ClientDetail = () => {
         </div>
     );
 };
+
+const Tile = ({ label, value, accent, negative }: {
+    label: string;
+    value: string;
+    accent?: boolean;
+    negative?: boolean;
+}) => (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p
+            className="mt-1 text-xl font-black tabular-nums"
+            style={{ color: negative ? VIZ.critical : accent ? VIZ.data : '#0f172a' }}
+        >
+            {value}
+        </p>
+    </div>
+);

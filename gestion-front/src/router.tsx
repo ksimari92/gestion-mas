@@ -1,22 +1,30 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { useAuthStore } from './stores/authStore';
-import { MobileLayout } from './components/templates/MobileLayout';
+import { AppShell } from './components/templates/AppShell';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Clients } from './pages/Clients';
 import { ClientDetail } from './pages/ClientDetail';
 import { Ventas } from './pages/Ventas';
 import { Gastos } from './pages/Gastos';
-import CreateClient from './pages/CreateClient';
+import { Costos } from './pages/Costos';
+import { Proyectos } from './pages/Proyectos';
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+interface ProtectedRouteProps {
+    children: ReactNode;
+    /** Las pantallas densas, como la planilla, ocupan todo el ancho disponible. */
+    fluid?: boolean;
+}
+
+const ProtectedRoute = ({ children, fluid }: ProtectedRouteProps) => {
     const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
 
-    return <MobileLayout>{children}</MobileLayout>;
+    return <AppShell fluid={fluid}>{children}</AppShell>;
 };
 
 export const AppRouter = () => {
@@ -40,6 +48,22 @@ export const AppRouter = () => {
                 }
             />
             <Route
+                path="/costos"
+                element={
+                    <ProtectedRoute fluid>
+                        <Costos />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/proyectos"
+                element={
+                    <ProtectedRoute>
+                        <Proyectos />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
                 path="/clients"
                 element={
                     <ProtectedRoute>
@@ -47,14 +71,8 @@ export const AppRouter = () => {
                     </ProtectedRoute>
                 }
             />
-            <Route
-                path="/clients/new"
-                element={
-                    <ProtectedRoute>
-                        <CreateClient />
-                    </ProtectedRoute>
-                }
-            />
+            {/* El alta pasó a ser un modal dentro del listado */}
+            <Route path="/clients/new" element={<Navigate to="/clients?new=true" replace />} />
             <Route
                 path="/clients/:id"
                 element={
@@ -71,6 +89,7 @@ export const AppRouter = () => {
                     </ProtectedRoute>
                 }
             />
+            {/* Vista de gastos anterior: se mantiene accesible mientras migra a /costos */}
             <Route
                 path="/expenses"
                 element={
