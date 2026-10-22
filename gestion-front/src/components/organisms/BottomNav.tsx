@@ -1,4 +1,4 @@
-import { Home, Users, TrendingUp, ShoppingCart } from 'lucide-react';
+import { Home, Users, TrendingUp, Table2 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 
@@ -7,11 +7,11 @@ export const BottomNav = () => {
         { to: '/', icon: Home, label: 'Inicio' },
         { to: '/clients', icon: Users, label: 'Clientes' },
         { to: '/income', icon: TrendingUp, label: 'Ventas' },
-        { to: '/expenses', icon: ShoppingCart, label: 'Gastos' },
+        { to: '/costos', icon: Table2, label: 'Costos' },
     ];
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-[60] px-4 pb-4 pointer-events-none">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[60] px-4 pb-4 pointer-events-none">
             <nav className="max-w-md mx-auto bg-white/90 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-3xl h-20 flex items-center justify-around px-6 pointer-events-auto overflow-hidden">
                 {navItems.map(({ to, icon: Icon, label }) => (
                     <NavLink

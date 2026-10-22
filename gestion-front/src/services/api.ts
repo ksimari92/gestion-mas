@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import {
     LoginResponse,
     Client,
+    ClientInput,
     Sale,
     Payment,
     Expense,
@@ -10,8 +11,26 @@ import {
     ClientStatement,
     Movement,
     SaleWithStatus,
-    ExpenseReceipt
+    ExpenseReceipt,
+    ExpenseFilters,
+    ExpenseInput,
+    ExpenseSummary,
+    DashboardData,
+    Project,
+    ProjectDetail,
+    ProjectStage,
+    StageTemplate
 } from '../types';
+
+/** Convierte los filtros de la planilla en query params, salteando vacíos. */
+const toParams = (filters: ExpenseFilters = {}): Record<string, string> => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        params[key] = String(value);
+    });
+    return params;
+};
 
 // Use environment variable for API URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
@@ -62,7 +81,7 @@ export const api = {
             const response = await apiInstance.get<Client[]>('/clients');
             return response.data;
         },
-        create: async (data: { name: string; cuit: string }): Promise<Client> => {
+        create: async (data: ClientInput): Promise<Client> => {
             const response = await apiInstance.post<Client>('/clients', data);
             return response.data;
         },
@@ -70,7 +89,7 @@ export const api = {
             const response = await apiInstance.get<ClientStatement>(`/clients/${id}/statement`);
             return response.data;
         },
-        update: async (id: number, data: { name: string; cuit: string }): Promise<Client> => {
+        update: async (id: number, data: ClientInput): Promise<Client> => {
             const response = await apiInstance.put<Client>(`/clients/${id}`, data);
             return response.data;
         },
@@ -107,25 +126,65 @@ export const api = {
             return response.data;
         },
     },
-    expenses: {
-        getAll: async (): Promise<Expense[]> => {
-            const response = await apiInstance.get<Expense[]>('/expenses');
+    projects: {
+        getAll: async (status?: string): Promise<Project[]> => {
+            const response = await apiInstance.get<Project[]>('/projects', {
+                params: status ? { status } : undefined,
+            });
             return response.data;
         },
-        create: async (data: {
-            description: string;
-            detail?: string;
-            amount: number;
-            category: string;
-            payment_source: string;
-            expense_date: string;
-            receipt_base64?: string | null;
-            receipt_mime_type?: string | null;
-        }): Promise<Expense> => {
+        getById: async (id: number): Promise<ProjectDetail> => {
+            const response = await apiInstance.get<ProjectDetail>(`/projects/${id}`);
+            return response.data;
+        },
+        getTemplates: async (): Promise<StageTemplate[]> => {
+            const response = await apiInstance.get<StageTemplate[]>('/projects/templates');
+            return response.data;
+        },
+        create: async (data: Omit<Partial<Project>, 'stages'> & { stages?: string[]; template?: string }): Promise<Project> => {
+            const response = await apiInstance.post<Project>('/projects', data);
+            return response.data;
+        },
+        update: async (id: number, data: Partial<Project>): Promise<Project> => {
+            const response = await apiInstance.put<Project>(`/projects/${id}`, data);
+            return response.data;
+        },
+        delete: async (id: number): Promise<{ message: string }> => {
+            const response = await apiInstance.delete<{ message: string }>(`/projects/${id}`);
+            return response.data;
+        },
+        createStage: async (projectId: number, data: Partial<ProjectStage>): Promise<ProjectStage> => {
+            const response = await apiInstance.post<ProjectStage>(`/projects/${projectId}/stages`, data);
+            return response.data;
+        },
+        updateStage: async (projectId: number, stageId: number, data: Partial<ProjectStage>): Promise<ProjectStage> => {
+            const response = await apiInstance.put<ProjectStage>(`/projects/${projectId}/stages/${stageId}`, data);
+            return response.data;
+        },
+        deleteStage: async (projectId: number, stageId: number): Promise<{ message: string }> => {
+            const response = await apiInstance.delete<{ message: string }>(`/projects/${projectId}/stages/${stageId}`);
+            return response.data;
+        },
+    },
+    expenses: {
+        getAll: async (filters?: ExpenseFilters): Promise<Expense[]> => {
+            const response = await apiInstance.get<Expense[]>('/expenses', { params: toParams(filters) });
+            return response.data;
+        },
+        getSummary: async (filters?: ExpenseFilters): Promise<ExpenseSummary> => {
+            const response = await apiInstance.get<ExpenseSummary>('/expenses/summary', { params: toParams(filters) });
+            return response.data;
+        },
+        create: async (data: ExpenseInput): Promise<Expense> => {
             const response = await apiInstance.post<Expense>('/expenses', data);
             return response.data;
         },
-        update: async (id: number, data: any): Promise<Expense> => {
+        createBulk: async (items: ExpenseInput[]): Promise<{ created: number; errors: { index: number; error: string }[] }> => {
+            const response = await apiInstance.post('/expenses/bulk', { expenses: items });
+            return response.data;
+        },
+        /** Actualización parcial: se envían sólo las celdas editadas. */
+        update: async (id: number, data: ExpenseInput): Promise<Expense> => {
             const response = await apiInstance.put<Expense>(`/expenses/${id}`, data);
             return response.data;
         },
@@ -139,12 +198,27 @@ export const api = {
         },
     },
     metrics: {
+        getDashboard: async (filters?: { project_id?: number | 'none'; from?: string; to?: string }): Promise<DashboardData> => {
+            const params: Record<string, string> = {};
+            if (filters?.project_id !== undefined && filters.project_id !== null) params.project_id = String(filters.project_id);
+            if (filters?.from) params.from = filters.from;
+            if (filters?.to) params.to = filters.to;
+            const response = await apiInstance.get<DashboardData>('/metrics/dashboard', { params });
+            return response.data;
+        },
         getCashFlow: async (): Promise<CashFlowMetrics> => {
             const response = await apiInstance.get<CashFlowMetrics>('/metrics/cash-flow');
             return response.data;
         },
-        getMovements: async (limit: number = 20): Promise<Movement[]> => {
-            const response = await apiInstance.get<Movement[]>(`/metrics/movements?limit=${limit}`);
+        getMovements: async (
+            limit: number = 20,
+            filters?: { project_id?: number | 'none'; from?: string; to?: string }
+        ): Promise<Movement[]> => {
+            const params: Record<string, string> = { limit: String(limit) };
+            if (filters?.project_id !== undefined && filters.project_id !== null) params.project_id = String(filters.project_id);
+            if (filters?.from) params.from = filters.from;
+            if (filters?.to) params.to = filters.to;
+            const response = await apiInstance.get<Movement[]>('/metrics/movements', { params });
             return response.data;
         },
     },

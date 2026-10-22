@@ -1,9 +1,9 @@
 ﻿import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { sign } from 'hono/jwt';
 import { createDb } from './db';
-import { sales, payments, auditLogs, companies, users, clients, expenses } from './schema';
+import { sales, payments, auditLogs, companies, users, clients, expenses, projects, projectStages } from './schema';
 import { authMiddleware, AuthVariables } from './middleware/auth';
 import * as bcrypt from 'bcryptjs';
 
@@ -12,6 +12,8 @@ import clientsRoute from './src/routes/clients';
 import salesRoute from './src/routes/sales';
 import paymentsRoute from './src/routes/payments';
 import expensesRoute from './src/routes/expenses';
+import projectsRoute from './src/routes/projects';
+import metricsRoute from './src/routes/metrics';
 
 type Bindings = {
     gestion_db: D1Database;
@@ -38,6 +40,8 @@ app.route('/clients', clientsRoute);
 app.route('/sales', salesRoute);
 app.route('/payments', paymentsRoute);
 app.route('/expenses', expensesRoute);
+app.route('/projects', projectsRoute);
+app.route('/metrics', metricsRoute);
 
 // POST /auth/login: Simple auth for the app
 app.post('/auth/login', async (c) => {
@@ -77,6 +81,8 @@ app.post('/setup', async (c) => {
     await db.delete(payments);
     await db.delete(sales);
     await db.delete(expenses);
+    await db.delete(projectStages);
+    await db.delete(projects);
     await db.delete(clients);
     await db.delete(users);
     await db.delete(companies);
@@ -135,6 +141,8 @@ app.post('/seed-production', async (c) => {
     await db.delete(payments);
     await db.delete(sales);
     await db.delete(expenses);
+    await db.delete(projectStages);
+    await db.delete(projects);
     await db.delete(clients);
     await db.delete(users);
     await db.delete(companies);
@@ -204,118 +212,6 @@ app.get('/admin/audit', async (c) => {
     return c.json(logs);
 });
 
-// GET /metrics/cash-flow: Summary of income vs expenses
-app.get('/metrics/cash-flow', async (c) => {
-    const db = createDb(c.env.gestion_db);
-    const user = c.get('user');
-
-    // Total Ingresos (Suma de amount_paid en payments)
-    const incomeResult = await db
-        .select({ total: sql<number>`SUM(amount_paid)` })
-        .from(payments)
-        .where(eq(payments.company_id, user.company_id));
-
-    const totalIncome = incomeResult[0]?.total || 0;
-
-    // Total Egresos (Suma de amount en expenses)
-    const expensesResult = await db
-        .select({ total: sql<number>`SUM(amount)` })
-        .from(expenses)
-        .where(eq(expenses.company_id, user.company_id));
-
-    const totalExpenses = expensesResult[0]?.total || 0;
-
-    return c.json({
-        total_income: Math.round(totalIncome * 100) / 100,
-        total_expenses: Math.round(totalExpenses * 100) / 100,
-        net_balance: Math.round((totalIncome - totalExpenses) * 100) / 100
-    });
-});
-
-// GET /metrics/movements: Combined list of payments and expenses
-app.get('/metrics/movements', async (c) => {
-    const db = createDb(c.env.gestion_db);
-    const user = c.get('user');
-    const limit = Number(c.req.query('limit')) || 20;
-
-    // Get recent payments (income)
-    const paymentsData = await db
-        .select({
-            id: payments.id,
-            amount: payments.amount_paid,
-            created_at: payments.created_at,
-            description: clients.name,
-            userName: users.name,
-        })
-        .from(payments)
-        .innerJoin(users, eq(payments.received_by_user_id, users.id))
-        .innerJoin(sales, eq(payments.sale_id, sales.id))
-        .innerJoin(clients, eq(sales.client_id, clients.id))
-        .where(eq(payments.company_id, user.company_id))
-        .orderBy(desc(payments.id))
-        .limit(limit);
-
-    // Get recent expenses
-    const expensesData = await db
-        .select({
-            id: expenses.id,
-            amount: expenses.amount,
-            created_at: expenses.created_at,
-            expense_date: expenses.expense_date,
-            description: expenses.description,
-            userName: users.name,
-            category: expenses.category,
-        })
-        .from(expenses)
-        .innerJoin(users, eq(expenses.user_id, users.id))
-        .where(eq(expenses.company_id, user.company_id))
-        .orderBy(desc(expenses.id))
-        .limit(limit);
-
-    // Combine and format
-    const movements = [
-        ...paymentsData.map(p => {
-            let date = p.created_at;
-            if (date && date.includes(' ')) {
-                date = date.replace(' ', 'T') + 'Z';
-            }
-            return {
-                id: `payment-${p.id}`,
-                type: 'INGRESO' as const,
-                amount: p.amount,
-                description: `Cobro de ${p.description}`,
-                userName: p.userName,
-                created_at: date,
-            };
-        }),
-        ...expensesData.map(e => {
-            let date = e.expense_date;
-            // If it's just YYYY-MM-DD, add T12:00:00 to avoid timezone shifts
-            if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                date = date + 'T12:00:00';
-            } else if (date && date.includes(' ')) {
-                date = date.replace(' ', 'T') + 'Z';
-            }
-            return {
-                id: `expense-${e.id}`,
-                type: 'EGRESO' as const,
-                amount: e.amount,
-                description: `${e.description}`,
-                userName: e.userName,
-                created_at: date || e.created_at,
-            };
-        })
-    ];
-
-    // Sort by date (most recent first)
-    movements.sort((a, b) => {
-        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return dateB - dateA;
-    });
-
-    return c.json(movements.slice(0, limit));
-});
-
+// Las métricas viven en src/routes/metrics.ts
 export default app;
 
